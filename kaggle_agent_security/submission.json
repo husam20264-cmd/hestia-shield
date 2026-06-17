@@ -1,7 +1,7 @@
 {
   "agent_name": "HestiaAttackAgent",
   "version": "1.0.0",
-  "timestamp": "2026-06-17T18:36:53.008038",
+  "timestamp": "2026-06-17T18:44:42.087457",
   "results": {
     "attack_chain": {
       "stages": [
@@ -47,7 +47,7 @@
         }
       ],
       "completion_rate": 1.0,
-      "duration": 0.018503
+      "duration": 0.017326
     },
     "security": {
       "detection_rate": 0.0,
