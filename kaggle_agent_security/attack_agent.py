@@ -267,6 +267,11 @@ class HestiaAttackAgent:
                     adaptation["new_prompt"], target_user_id, stage
                 )
                 success = self._evaluate_result(result, stage)
+            elif adaptation["action"] == "blocked":
+                print(
+                    f"   Safety policy blocked mutation: "
+                    f"{adaptation['reason']}"
+                )
 
             self.kill_chain.advance(success)
 
@@ -362,7 +367,10 @@ class HestiaAttackAgent:
         self, result: Dict, stage: Dict
     ) -> Dict:
         """
-        تحليل رد فعل النظام وتكييف الهجوم باستخدام الذاكرة المتكيفة
+        تحليل رد فعل النظام وتكييف الاختبار باستخدام الذاكرة المتكيفة
+
+        Only generates safe red-team simulation variants.
+        Any mutation that violates the safety policy is rejected before use.
         """
         attack_id = self.memory_tracker.track(
             prompt=result.get("prompt", ""),
@@ -380,6 +388,14 @@ class HestiaAttackAgent:
                 tool=result.get("tool", "shell.run"),
                 target_context="production_system",
             )
+
+            if not self.memory_tracker._validate_mutation(new_prompt):
+                return {
+                    "action": "blocked",
+                    "reason": "Unsafe mutation rejected by adaptive safety policy",
+                    "strategy": strategy,
+                }
+
             return {
                 "action": "retry",
                 "new_prompt": new_prompt,
