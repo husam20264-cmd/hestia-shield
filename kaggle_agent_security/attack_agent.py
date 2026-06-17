@@ -29,60 +29,12 @@ except ImportError:
 
 
 # ============================================================
-# Memory Tracker
+# Memory Tracker - Adaptive
 # ============================================================
 
-class MemoryTracker:
-    """تتبع الذاكرة لكل prompt -> response لتحسين الهجمات مستقبلاً"""
+from memory_tracker import AdaptiveMemoryTracker, AttackMemory
 
-    def __init__(self):
-        self.memory: Dict[str, Dict] = {}
-        self.history: List[Dict] = []
-
-    def track(self, prompt: str, response: str, tool_used: str, success: bool):
-        """تسجيل تفاعل جديد"""
-        prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()[:16]
-
-        entry = {
-            "timestamp": datetime.now().isoformat(),
-            "prompt_hash": prompt_hash,
-            "prompt": prompt[:200],
-            "response": response[:500],
-            "tool_used": tool_used,
-            "success": success,
-        }
-
-        self.memory[prompt_hash] = entry
-        self.history.append(entry)
-
-        return prompt_hash
-
-    def get_similar(self, prompt: str, threshold: float = 0.7) -> Optional[Dict]:
-        """البحث عن تفاعل مشابه"""
-        prompt_words = set(prompt.lower().split())
-
-        for entry in self.history:
-            entry_words = set(entry["prompt"].lower().split())
-            overlap = len(prompt_words & entry_words) / max(
-                len(prompt_words), len(entry_words), 1
-            )
-            if overlap >= threshold:
-                return entry
-
-        return None
-
-    def get_stats(self) -> Dict:
-        """إحصائيات الذاكرة"""
-        successful = sum(1 for e in self.history if e["success"])
-        total = len(self.history)
-
-        return {
-            "total_interactions": total,
-            "successful": successful,
-            "success_rate": successful / total if total > 0 else 0,
-            "unique_prompts": len(self.memory),
-            "last_interaction": self.history[-1] if self.history else None,
-        }
+MemoryTracker = AdaptiveMemoryTracker  # backward compat alias
 
 
 # ============================================================
@@ -265,7 +217,7 @@ class HestiaAttackAgent:
             )
 
         self.kill_chain = KillChain()
-        self.memory_tracker = MemoryTracker()
+        self.memory_tracker = AdaptiveMemoryTracker()
         self.target_tools = TargetTools()
 
         self.attack_count = 0
@@ -306,17 +258,20 @@ class HestiaAttackAgent:
             result = self._execute_attack(attack_prompt, target_user_id, stage)
             success = self._evaluate_result(result, stage)
 
+            adaptation = self.analyze_feedback_and_adapt(result, stage)
+
+            if adaptation["action"] == "retry":
+                print(f"   Adapting attack for stage {stage['name']}")
+                print(f"   Strategy: {adaptation['strategy']['strategy']}")
+                result = self._execute_attack(
+                    adaptation["new_prompt"], target_user_id, stage
+                )
+                success = self._evaluate_result(result, stage)
+
             self.kill_chain.advance(success)
 
             if success:
                 self.successful_attacks += 1
-
-            self.memory_tracker.track(
-                prompt=attack_prompt,
-                response=result.get("response", ""),
-                tool_used=result.get("tool", ""),
-                success=success,
-            )
 
         summary = self._get_attack_summary()
 
@@ -402,6 +357,37 @@ class HestiaAttackAgent:
             print(f"   Hestia Risk Score: {result['hestia_risk_score']:.2f}")
 
         return True
+
+    def analyze_feedback_and_adapt(
+        self, result: Dict, stage: Dict
+    ) -> Dict:
+        """
+        تحليل رد فعل النظام وتكييف الهجوم باستخدام الذاكرة المتكيفة
+        """
+        attack_id = self.memory_tracker.track(
+            prompt=result.get("prompt", ""),
+            tool_used=result.get("tool", ""),
+            response=result.get("response", ""),
+            was_blocked=result.get("detected", False),
+            risk_score=result.get("risk_score", 0),
+        )
+
+        strategy = self.memory_tracker.get_attack_strategy()
+
+        if result.get("detected", False):
+            new_prompt = self.memory_tracker.generate_adaptive_attack(
+                base_prompt=stage["name"],
+                tool=result.get("tool", "shell.run"),
+                target_context="production_system",
+            )
+            return {
+                "action": "retry",
+                "new_prompt": new_prompt,
+                "delay": 0.5,
+                "strategy": strategy,
+            }
+
+        return {"action": "continue", "strategy": strategy}
 
     def _get_attack_summary(self) -> Dict:
         return {
