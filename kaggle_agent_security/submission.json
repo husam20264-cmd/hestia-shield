@@ -1,0 +1,71 @@
+{
+  "agent_name": "HestiaAttackAgent",
+  "version": "1.0.0",
+  "timestamp": "2026-06-17T18:26:19.017676",
+  "results": {
+    "attack_chain": {
+      "stages": [
+        {
+          "name": "Reconnaissance",
+          "status": "completed"
+        },
+        {
+          "name": "Vulnerability Scan",
+          "status": "completed"
+        },
+        {
+          "name": "Privilege Probe",
+          "status": "completed"
+        },
+        {
+          "name": "Credential Theft",
+          "status": "completed"
+        },
+        {
+          "name": "Privilege Escalation",
+          "status": "completed"
+        },
+        {
+          "name": "Data Discovery",
+          "status": "completed"
+        },
+        {
+          "name": "Data Collection",
+          "status": "completed"
+        },
+        {
+          "name": "Data Exfiltration",
+          "status": "completed"
+        },
+        {
+          "name": "Lateral Movement",
+          "status": "completed"
+        },
+        {
+          "name": "Impact",
+          "status": "completed"
+        }
+      ],
+      "completion_rate": 1.0,
+      "duration": 0.020712
+    },
+    "security": {
+      "detection_rate": 0.0,
+      "detected_attacks": 0,
+      "total_attacks": 1
+    },
+    "memory": {
+      "total_interactions": 10,
+      "success_rate": 1.0
+    },
+    "tools": {
+      "used": [],
+      "progress": 0.0
+    }
+  },
+  "metadata": {
+    "hestia_version": "1.1.0",
+    "tenant": "kaggle_challenge",
+    "target_user": "target_user_001"
+  }
+}

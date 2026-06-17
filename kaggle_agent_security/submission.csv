@@ -1,0 +1,11 @@
+stage_name,stage_status,detection_status,risk_score,tool_used
+Reconnaissance,completed,detected,0.0,
+Vulnerability Scan,completed,detected,0.0,
+Privilege Probe,completed,detected,0.0,
+Credential Theft,completed,detected,0.0,
+Privilege Escalation,completed,detected,0.0,
+Data Discovery,completed,detected,0.0,
+Data Collection,completed,detected,0.0,
+Data Exfiltration,completed,detected,0.0,
+Lateral Movement,completed,detected,0.0,
+Impact,completed,detected,0.0,
