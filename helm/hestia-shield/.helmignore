@@ -1,0 +1,5 @@
+# Helm ignore file
+.git
+.gitignore
+*.md
+ci/

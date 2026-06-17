@@ -1,0 +1,50 @@
+# ============================================================
+# OpenTelemetry Collector Configuration
+# Receives OTLP from Hestia Shield, exports to console/logging
+# In production, replace exporters with Jaeger/Prometheus/Loki
+# ============================================================
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 128
+    spike_limit_mib: 32
+  attributes:
+    actions:
+      - key: environment
+        value: production
+        action: insert
+
+exporters:
+  debug:
+    verbosity: detailed
+  otlp:
+    endpoint: "jaeger:4317"
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, attributes]
+      exporters: [debug]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, attributes]
+      exporters: [debug]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, attributes]
+      exporters: [debug]

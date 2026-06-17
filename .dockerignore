@@ -1,0 +1,64 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+.installed.cfg
+*.manifest
+*.spec
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tests
+tests/
+.pytest_cache/
+htmlcov/
+.coverage
+*.cover
+
+# Data (runtime volume)
+data/tenants.json
+data/api_keys.json
+data/webhooks.json
+data/events.json
+data/audit.json
+data/alerts.json
+data/agents.json
+data/stats.json
+
+# Config
+.env
+.env.local
+*.log
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Docs
+README.md
+CHANGELOG.md
+SECURITY.md
+LICENSE

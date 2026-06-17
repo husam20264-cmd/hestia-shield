@@ -1,0 +1,19 @@
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+gunicorn>=21.2.0
+pydantic>=2.0.0
+pyjwt>=2.8.0
+httpx>=0.24.0
+redis>=4.6.0
+sqlalchemy>=2.0.0
+asyncpg>=0.28.0
+alembic>=1.12.0
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-asyncio>=0.21.0
+
+# OpenTelemetry (optional - install separately for production observability)
+# opentelemetry-distro>=0.43b0
+# opentelemetry-exporter-otlp-proto-grpc>=1.23.0
+# opentelemetry-instrumentation-fastapi>=0.43b0
+# opentelemetry-instrumentation-httpx>=0.43b0

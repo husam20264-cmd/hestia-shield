@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hestia-shield-config
+data:
+  HESTIA_HOST: "0.0.0.0"
+  HESTIA_PORT: "8000"
+  HESTIA_LOG_LEVEL: "INFO"
+  HESTIA_DATA_DIR: "/app/data"
+  HESTIA_OTEL_ENABLED: "false"
+  HESTIA_DATABASE_URL: "postgresql+asyncpg://hestia:hestia@postgres:5432/hestia"
+  HESTIA_REDIS_URL: "redis://redis:6379/0"

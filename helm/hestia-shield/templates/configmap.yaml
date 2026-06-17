@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hestia-shield.fullname" . }}-config
+  labels:
+    {{- include "hestia-shield.labels" . | nindent 4 }}
+data:
+  HESTIA_DATA_DIR: "/app/data"
+  HESTIA_HOST: "0.0.0.0"
+  HESTIA_PORT: "8000"
+  HESTIA_LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  HESTIA_STORE_RAW_INPUTS: {{ .Values.config.storeRawInputs | quote }}
+  HESTIA_RATE_LIMIT_WINDOW: {{ .Values.config.rateLimitWindow | quote }}
+  HESTIA_RATE_LIMIT_MAX: {{ .Values.config.rateLimitMax | quote }}
+  HESTIA_OTEL_ENABLED: {{ .Values.otel.enabled | quote }}
+  HESTIA_OTEL_SERVICE_NAME: {{ include "hestia-shield.fullname" . }}
+  HESTIA_OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.otel.endpoint | quote }}
+  HESTIA_OTEL_TRACES: {{ .Values.otel.traces | quote }}
+  HESTIA_OTEL_METRICS: {{ .Values.otel.metrics | quote }}

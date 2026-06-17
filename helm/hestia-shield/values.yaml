@@ -1,0 +1,163 @@
+# ============================================================
+# Hestia Shield v1.1.0 - Helm Values
+# ============================================================
+
+# Number of API replicas
+replicaCount: 3
+
+# Image configuration
+image:
+  repository: hestiashield/hestia-shield
+  tag: "1.1.0"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Service account
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+# Pod security
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+
+# Resources
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Autoscaling
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPU: 70
+  targetMemory: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+    scaleDown:
+      stabilizationWindowSeconds: 120
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 30
+
+# Service
+service:
+  type: ClusterIP
+  port: 80
+
+# Ingress
+ingress:
+  enabled: false
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: api.hestia-shield.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: hestia-shield-tls
+      hosts:
+        - api.hestia-shield.com
+
+# Config
+config:
+  logLevel: INFO
+  storeRawInputs: false
+  rateLimitWindow: 60
+  rateLimitMax: 100
+
+# Secrets (override via --set or external secrets)
+secrets:
+  jwtSecret: "change-me-in-production"
+
+# Database
+postgresql:
+  enabled: true
+  auth:
+    database: hestia
+    username: hestia
+    password: "hestia"
+  architecture: standalone
+  primary:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
+    persistence:
+      size: 10Gi
+
+externalDatabase:
+  url: ""
+
+# Redis
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: false
+  master:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
+    persistence:
+      size: 5Gi
+
+externalRedis:
+  url: ""
+
+# OpenTelemetry
+otel:
+  enabled: true
+  endpoint: "http://hestia-shield-otel-collector:4317"
+  traces: true
+  metrics: true
+
+# Persistence (app data)
+persistence:
+  enabled: true
+  size: 1Gi
+  storageClass: ""
+
+# Node selection
+nodeSelector: {}
+tolerations: []
+affinity: {}

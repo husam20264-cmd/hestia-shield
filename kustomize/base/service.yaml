@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: hestia-shield
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      name: http
+  selector:
+    app.kubernetes.io/name: hestia-shield
