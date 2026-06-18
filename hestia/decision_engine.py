@@ -2,14 +2,22 @@
 Decision Engine for Hestia Shield v1.0.0
 """
 
+import os
 import time
 import logging
 from typing import Dict, Any, Optional, List
+from pathlib import Path
 from .models import Decision, DecisionType, RiskLevel, ToolCall
 from .rules_engine import RulesEngine
 from .classifier import TextClassifier
 from .attack_memory import AttackMemory
 from .telemetry import get_tracer, get_meter
+
+try:
+    from .ml.inference import ThreatInference
+    ML_AVAILABLE = True
+except ImportError:
+    ML_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 _tracer = get_tracer("hestia.decision_engine")
@@ -30,6 +38,14 @@ class DecisionEngine:
         self.classifier = classifier or TextClassifier()
         self.attack_memory = attack_memory or AttackMemory()
         self.component_times: Dict[str, float] = {}
+
+        model_path = os.getenv("HESTIA_ML_MODEL_PATH", "")
+        if ML_AVAILABLE and model_path and Path(model_path).exists():
+            self.ml_inference = ThreatInference(Path(model_path))
+            self.ml_enabled = True
+        else:
+            self.ml_inference = None
+            self.ml_enabled = False
 
     async def evaluate_prompt(
         self,
@@ -76,6 +92,30 @@ class DecisionEngine:
                 span.set_attribute("fast_path", True)
                 _decision_counter.add(1, {"decision": "block"})
                 return decision
+
+            if self.ml_enabled and self.ml_inference:
+                ml_risk, ml_threat = self.ml_inference.evaluate(
+                    prompt=prompt,
+                    tool_call={},
+                    action_history=[],
+                )
+                self.component_times["ml_inference"] = time.perf_counter() - start_time
+
+                if ml_threat:
+                    decision = Decision(
+                        decision=DecisionType.BLOCK,
+                        risk_score=ml_risk,
+                        reason=f"ML-based detection: {ml_risk:.2f} risk score",
+                        details={
+                            "ml_risk": ml_risk,
+                            "source": "ml",
+                            "fast_path": False,
+                        },
+                    )
+                    span.set_attribute("decision", "block")
+                    span.set_attribute("ml_risk", ml_risk)
+                    _decision_counter.add(1, {"decision": "block"})
+                    return decision
 
             user_profile = self.attack_memory.get_user_risk_profile(user_id)
             self.component_times["attack_memory"] = time.perf_counter() - start_time
@@ -145,6 +185,31 @@ class DecisionEngine:
                 span.set_attribute("decision", rule_decision.decision.value)
                 _decision_counter.add(1, {"decision": rule_decision.decision.value})
                 return rule_decision
+
+            if self.ml_enabled and self.ml_inference:
+                ml_risk, ml_threat = self.ml_inference.evaluate(
+                    prompt="",
+                    tool_call={"name": tool_call.name, "category": tool_call.category, "target": {}, "arguments": {}},
+                    action_history=[],
+                )
+                self.component_times["ml_inference"] = time.perf_counter() - start_time
+
+                if ml_threat:
+                    decision = Decision(
+                        decision=DecisionType.BLOCK,
+                        risk_score=ml_risk,
+                        reason=f"ML detected malicious tool call: {tool_call.name}",
+                        details={
+                            "ml_risk": ml_risk,
+                            "tool_name": tool_call.name,
+                            "source": "ml",
+                            "fast_path": False,
+                        },
+                    )
+                    span.set_attribute("decision", "block")
+                    span.set_attribute("ml_risk", ml_risk)
+                    _decision_counter.add(1, {"decision": "block"})
+                    return decision
 
             if tool_call.is_critical:
                 if tool_call.environment == "production":
