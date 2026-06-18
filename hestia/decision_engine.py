@@ -28,6 +28,12 @@ try:
 except ImportError:
     SL_MEMORY_AVAILABLE = False
 
+try:
+    from .policy.adaptive_generator import AdaptivePolicyGenerator, PolicyApplier
+    POLICY_AVAILABLE = True
+except ImportError:
+    POLICY_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 _tracer = get_tracer("hestia.decision_engine")
 _meter = get_meter("hestia.decision_engine")
@@ -58,7 +64,8 @@ class DecisionEngine:
 
         if SL_MEMORY_AVAILABLE:
             self.sl_memory = SLAttackMemory()
-            self.self_learner = SelfLearner(self.sl_memory)
+            self.policy_generator = AdaptivePolicyGenerator(self.sl_memory) if POLICY_AVAILABLE else None
+            self.self_learner = SelfLearner(self.sl_memory, self.policy_generator)
             self.strategy_optimizer = StrategyOptimizer(self.sl_memory)
             self.learning_enabled = True
         else:
@@ -66,6 +73,22 @@ class DecisionEngine:
             self.self_learner = None
             self.strategy_optimizer = None
             self.learning_enabled = False
+            self.policy_generator = None
+
+        self.policy_auto_apply = os.getenv("HESTIA_POLICY_AUTO_APPLY", "false").lower() == "true"
+        self.policy_generation_interval = int(os.getenv("HESTIA_POLICY_GEN_INTERVAL", "10"))
+
+        if POLICY_AVAILABLE and self.learning_enabled and self.policy_generator:
+            self.policy_applier = PolicyApplier(
+                self.rules_engine,
+                auto_apply=self.policy_auto_apply,
+            )
+            self.policy_enabled = True
+        else:
+            self.policy_applier = None
+            self.policy_enabled = False
+
+        self._decision_count = 0
 
     async def evaluate_prompt(
         self,
@@ -304,10 +327,20 @@ class DecisionEngine:
         if self.strategy_optimizer:
             self.strategy_optimizer.update(record)
 
-        stats = self.sl_memory.get_stats()
-        if stats["total_attacks"] > 0 and stats["total_attacks"] % 5 == 0:
+        self._decision_count += 1
+
+        if self._decision_count % 5 == 0:
             if self.self_learner:
                 self.self_learner.learn_from_history(limit=50)
+
+        if self.policy_enabled and self.policy_generator and self.policy_applier:
+            if self._decision_count % self.policy_generation_interval == 0:
+                try:
+                    policy = self.policy_generator.generate(limit=100)
+                    if policy.rules:
+                        self.policy_applier.apply(policy)
+                except Exception as e:
+                    logger.warning("Adaptive policy generation failed: %s", e)
 
     def get_stats(self) -> Dict:
         stats = {
@@ -319,4 +352,8 @@ class DecisionEngine:
         }
         if self.sl_memory:
             stats["self_learning"] = self.sl_memory.get_stats()
+        if self.policy_enabled and self.policy_generator:
+            stats["adaptive_policy"] = self.policy_generator.get_stats()
+            if self.policy_applier:
+                stats["adaptive_policy"].update(self.policy_applier.get_stats())
         return stats

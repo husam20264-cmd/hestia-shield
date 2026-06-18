@@ -16,11 +16,12 @@ class SelfLearner:
     محرك التعلم الذاتي للهجمات
     """
 
-    def __init__(self, memory: AttackMemory):
+    def __init__(self, memory: AttackMemory, policy_generator=None):
         self.memory = memory
         self.analyzer = PatternAnalyzer()
         self.learning_rate = 0.1
         self.mutation_probability = 0.3
+        self.policy_generator = policy_generator
 
     def learn_from_attack(self, attack_id: str) -> Dict[str, Any]:
         """التعلم من هجوم واحد"""
@@ -137,8 +138,28 @@ class SelfLearner:
         }
 
     def _update_strategy(self, lessons: Dict):
-        """تحديث استراتيجية الهجوم بناءً على الدروس"""
-        pass
+        """
+        ✅ تحديث استراتيجية الهجوم بناءً على الدروس
+        وتمريرها إلى مولد السياسات إن وُجد
+        """
+        # لو لدينا مولد سياسات، نمرر له الدروس المستفادة
+        if self.policy_generator:
+            try:
+                policy_update = self.policy_generator.generate_from_lessons(lessons)
+                # يمكن تسجيل نتيجة التحديث لاحقاً
+                # logger.info(f"Policy generator applied: {policy_update}")
+            except Exception:
+                # تسجيل الخطأ
+                pass
+
+        # يمكننا أيضاً تحديث معدل التعلم ديناميكياً
+        # مثلاً: زيادة معدل التعلم إذا كانت معدلات النجاح منخفضة
+        if lessons.get('overall_success_rate') is not None:
+            success_rate = lessons['overall_success_rate']
+            if success_rate < 0.3:
+                self.learning_rate = min(0.5, self.learning_rate + 0.05)
+            elif success_rate > 0.7:
+                self.learning_rate = max(0.05, self.learning_rate - 0.02)
 
     def generate_improved_attack(self, base_prompt: str, tool: str) -> str:
         """توليد هجوم محسّن بناءً على الدروس المستفادة"""
