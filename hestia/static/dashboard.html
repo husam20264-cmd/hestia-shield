@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hestia Shield Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; }
+  .header { background: #1e293b; padding: 16px 24px; border-bottom: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; }
+  .header h1 { font-size: 20px; display: flex; align-items: center; gap: 8px; }
+  .header h1 span { color: #38bdf8; }
+  .header-right { display: flex; align-items: center; gap: 16px; }
+  .status-badge { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #94a3b8; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; display: inline-block; }
+  .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; }
+  .card-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 8px; }
+  .card-value { font-size: 28px; font-weight: 700; }
+  .card-sub { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+  .green { color: #22c55e; }
+  .red { color: #ef4444; }
+  .yellow { color: #eab308; }
+  .blue { color: #38bdf8; }
+  .purple { color: #a855f7; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  @media (max-width: 768px) { .grid-2 { grid-template-columns: 1fr; } }
+  .panel { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; }
+  .panel-title { font-size: 14px; font-weight: 600; margin-bottom: 16px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; }
+  .alert { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-bottom: 1px solid #1e293b; }
+  .alert:last-child { border-bottom: none; }
+  .alert-icon { font-size: 16px; margin-top: 2px; }
+  .alert-content { flex: 1; }
+  .alert-title { font-size: 14px; font-weight: 500; }
+  .alert-meta { font-size: 12px; color: #64748b; margin-top: 2px; }
+  .alert-severity-critical .alert-icon { color: #ef4444; }
+  .alert-severity-high .alert-icon { color: #f97316; }
+  .alert-severity-medium .alert-icon { color: #eab308; }
+  .alert-severity-low .alert-icon { color: #22c55e; }
+  .alert-severity-info .alert-icon { color: #38bdf8; }
+  .policy-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #1e293b; }
+  .policy-item:last-child { border-bottom: none; }
+  .policy-name { font-size: 14px; }
+  .policy-count { font-size: 12px; color: #64748b; }
+  .error-msg { text-align: center; padding: 40px; color: #ef4444; }
+  .loading { text-align: center; padding: 40px; color: #64748b; }
+  select { background: #1e293b; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px; padding: 6px 12px; font-size: 13px; }
+  .chart-container { position: relative; height: 250px; }
+  canvas { max-height: 250px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1><span>🛡️</span> Hestia Shield</h1>
+  <div class="header-right">
+    <div class="status-badge"><span class="status-dot"></span> API Connected</div>
+    <select id="periodSelect" onchange="refreshAll()">
+      <option value="1">Last hour</option>
+      <option value="6">Last 6 hours</option>
+      <option value="24" selected>Last 24 hours</option>
+      <option value="168">Last 7 days</option>
+    </select>
+  </div>
+</div>
+
+<div class="container">
+  <div class="cards" id="summaryCards">
+    <div class="card"><div class="card-label">Requests</div><div class="card-value blue" id="totalRequests">—</div><div class="card-sub" id="requestsSub">Loading...</div></div>
+    <div class="card"><div class="card-label">Blocks</div><div class="card-value red" id="totalBlocks">—</div><div class="card-sub" id="blocksSub">Loading...</div></div>
+    <div class="card"><div class="card-label">Block Rate</div><div class="card-value yellow" id="blockRate">—</div><div class="card-sub">of total requests</div></div>
+    <div class="card"><div class="card-label">Avg Latency</div><div class="card-value purple" id="avgLatency">—</div><div class="card-sub">p50 response time</div></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-title">📈 Request & Block Trends</div>
+      <div class="chart-container"><canvas id="trendChart"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">⚠️ Recent Alerts</div>
+      <div id="alertFeed"><div class="loading">Loading alerts...</div></div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-title">🧠 Active Policies</div>
+      <div id="policyPanel"><div class="loading">Loading policies...</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">📊 Decision Distribution</div>
+      <div class="chart-container"><canvas id="decisionChart"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let trendChartInstance = null;
+let decisionChartInstance = null;
+
+const COLORS = { blue: '#38bdf8', red: '#ef4444', yellow: '#eab308', green: '#22c55e', purple: '#a855f7' };
+
+async function apiFetch(path) {
+  const token = localStorage.getItem('hestia_token');
+  if (!token) return { error: 'Not authenticated. Set token in localStorage.' };
+  const res = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) {
+    const text = await res.text();
+    return { error: `${res.status}: ${text}` };
+  }
+  return res.json();
+}
+
+async function refreshSummary() {
+  const data = await apiFetch('/v1/dashboard/summary');
+  if (data.error) {
+    document.querySelectorAll('.card-value').forEach(el => el.textContent = 'ERR');
+    return showAuthError(data.error);
+  }
+  document.getElementById('totalRequests').textContent = data.total_requests || 0;
+  document.getElementById('totalBlocks').textContent = data.blocks || 0;
+  document.getElementById('blockRate').textContent = ((data.block_rate || 0) * 100).toFixed(1) + '%';
+  document.getElementById('avgLatency').textContent = (data.avg_latency_ms || 0).toFixed(1) + 'ms';
+  document.getElementById('requestsSub').textContent = (data.total_requests_7d || 0) + ' in 7d';
+  document.getElementById('blocksSub').textContent = (data.active_alerts || 0) + ' active alerts';
+}
+
+async function refreshTrends() {
+  const hours = document.getElementById('periodSelect').value;
+  const data = await apiFetch(`/v1/dashboard/trends?hours=${hours}`);
+  if (data.error) return;
+
+  const series = data.series || [];
+  const labels = series.map(s => {
+    const d = new Date(s.timestamp);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  });
+  const reqData = series.map(s => s.requests);
+  const blockData = series.map(s => s.blocks);
+  const latData = series.map(s => s.avg_latency_ms);
+
+  if (trendChartInstance) trendChartInstance.destroy();
+
+  const ctx = document.getElementById('trendChart').getContext('2d');
+  trendChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Requests', data: reqData, borderColor: COLORS.blue, backgroundColor: COLORS.blue + '20', fill: true, tension: 0.3, pointRadius: 2 },
+        { label: 'Blocks', data: blockData, borderColor: COLORS.red, backgroundColor: COLORS.red + '20', fill: true, tension: 0.3, pointRadius: 2 },
+        { label: 'Avg Latency (ms)', data: latData, borderColor: COLORS.purple, yAxisID: 'y1', tension: 0.3, pointRadius: 2, borderDash: [5, 5] },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#1e293b' } },
+        y: { beginAtZero: true, ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#334155' } },
+        y1: { position: 'right', beginAtZero: true, ticks: { color: '#64748b', font: { size: 10 } }, grid: { display: false } },
+      }
+    }
+  });
+}
+
+async function refreshAlerts() {
+  const data = await apiFetch('/v1/dashboard/recent-alerts?limit=15');
+  if (data.error) { document.getElementById('alertFeed').innerHTML = `<div class="error-msg">${data.error}</div>`; return; }
+
+  const alerts = data.alerts || [];
+  const feed = document.getElementById('alertFeed');
+
+  if (alerts.length === 0) {
+    feed.innerHTML = '<div style="text-align:center;padding:20px;color:#64748b;">No recent alerts</div>';
+    return;
+  }
+
+  feed.innerHTML = alerts.map(a => {
+    const sev = (a.severity || 'info').toLowerCase();
+    const icons = { critical: '🔴', high: '🟠', medium: '🟡', low: '🟢', info: '🔵' };
+    return `<div class="alert alert-severity-${sev}">
+      <div class="alert-icon">${icons[sev] || '🔵'}</div>
+      <div class="alert-content">
+        <div class="alert-title">${esc(a.title)}</div>
+        <div class="alert-meta">${esc(a.agent_id)} · ${timeAgo(a.created_at)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function refreshPolicies() {
+  const data = await apiFetch('/v1/dashboard/policy-status');
+  if (data.error) { document.getElementById('policyPanel').innerHTML = `<div class="error-msg">${data.error}</div>`; return; }
+
+  const policies = data.active_policies || [];
+  const panel = document.getElementById('policyPanel');
+
+  if (policies.length === 0) {
+    panel.innerHTML = '<div style="text-align:center;padding:20px;color:#64748b;">No policies triggered yet</div>';
+    return;
+  }
+
+  panel.innerHTML = policies.slice(0, 15).map(p =>
+    `<div class="policy-item">
+      <span class="policy-name">${esc(p.name)}</span>
+      <span class="policy-count">${p.triggered_count} triggers</span>
+    </div>`
+  ).join('');
+}
+
+async function refreshDecisionChart() {
+  if (decisionChartInstance) decisionChartInstance.destroy();
+
+  const data = await apiFetch('/v1/dashboard/summary');
+  if (data.error) return;
+
+  const ctx = document.getElementById('decisionChart').getContext('2d');
+  const total = data.total_requests || 1;
+  const blocks = data.blocks || 0;
+  const allowed = total - blocks;
+
+  decisionChartInstance = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Allowed', 'Blocked'],
+      datasets: [{ data: [allowed, blocks], backgroundColor: [COLORS.green, COLORS.red], borderWidth: 0 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 11 }, padding: 12 } }
+      }
+    }
+  });
+}
+
+function refreshAll() {
+  refreshSummary();
+  refreshTrends();
+  refreshAlerts();
+  refreshPolicies();
+  refreshDecisionChart();
+}
+
+function esc(s) { return String(s || '').replace(/[&<>"']/g, ''); }
+
+function timeAgo(ts) {
+  if (!ts) return '';
+  const diff = Date.now() - new Date(ts).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins + 'm ago';
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + 'h ago';
+  return Math.floor(hrs / 24) + 'd ago';
+}
+
+function showAuthError(msg) {
+  const feed = document.getElementById('alertFeed');
+  feed.innerHTML = `<div class="error-msg">⚠️ ${msg}<br><small>Set your token: <code>localStorage.setItem('hestia_token', '...')</code></small></div>`;
+}
+
+refreshAll();
+setInterval(refreshAll, 15000);
+</script>
+</body>
+</html>

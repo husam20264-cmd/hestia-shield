@@ -173,6 +173,59 @@ async def get_agents(auth: dict = Depends(verify_auth)):
     return {"agents": []}
 
 
+# ── Dashboard Endpoints ─────────────────────────────────────────────
+
+@app.get("/v1/dashboard/summary")
+async def dashboard_summary(auth: dict = Depends(verify_auth)):
+    from .dashboard import get_summary
+    tenant_id = auth["tenant_id"]
+    data = await get_summary(storage, tenant_id)
+    return data
+
+
+@app.get("/v1/dashboard/trends")
+async def dashboard_trends(
+    hours: int = 24,
+    auth: dict = Depends(verify_auth),
+):
+    from .dashboard import get_trends
+    tenant_id = auth["tenant_id"]
+    data = await get_trends(storage, tenant_id, hours=hours)
+    return data
+
+
+@app.get("/v1/dashboard/recent-alerts")
+async def dashboard_recent_alerts(
+    limit: int = 20,
+    auth: dict = Depends(verify_auth),
+):
+    from .dashboard import get_recent_alerts
+    tenant_id = auth["tenant_id"]
+    data = await get_recent_alerts(storage, tenant_id, limit=limit)
+    return {"alerts": data}
+
+
+@app.get("/v1/dashboard/policy-status")
+async def dashboard_policy_status(auth: dict = Depends(verify_auth)):
+    from .dashboard import get_policy_status
+    tenant_id = auth["tenant_id"]
+    data = await get_policy_status(storage, tenant_id)
+    return data
+
+
+@app.get("/dashboard")
+async def dashboard_ui():
+    """Serve the dashboard HTML page."""
+    import os
+    from fastapi.responses import FileResponse
+    dashboard_path = os.path.join(
+        os.path.dirname(__file__), "static", "dashboard.html"
+    )
+    if os.path.exists(dashboard_path):
+        return FileResponse(dashboard_path, media_type="text/html")
+    return {"error": "Dashboard UI not found"}
+
+
 @app.on_event("startup")
 async def startup_event():
     global storage, auth_manager
