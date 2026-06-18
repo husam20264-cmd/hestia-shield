@@ -25,7 +25,7 @@ auth_manager: AuthManager = None
 
 app = FastAPI(
     title="Hestia Shield API",
-    version="1.1.0",
+    version="1.2.0",
     description="Runtime Security for AI Agents"
 )
 

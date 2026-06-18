@@ -24,7 +24,7 @@ FROM python:3.11-slim AS runtime
 
 LABEL org.opencontainers.image.title="Hestia Shield"
 LABEL org.opencontainers.image.description="Runtime Security for AI Agents"
-LABEL org.opencontainers.image.version="1.1.0"
+LABEL org.opencontainers.image.version="1.2.0"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 
 # Install runtime system deps only

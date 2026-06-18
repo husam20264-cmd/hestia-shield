@@ -17,7 +17,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: hestiashield/hestia-shield:1.1.0
+    image: hestiashield/hestia-shield:1.2.0
     container_name: hestia-api
     restart: unless-stopped
     ports:
@@ -31,6 +31,9 @@ services:
       HESTIA_OTEL_ENABLED: "${HESTIA_OTEL_ENABLED:-true}"
       HESTIA_OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
       HESTIA_OTEL_SERVICE_NAME: "hestia-shield"
+      HESTIA_ML_MODEL_PATH: "${HESTIA_ML_MODEL_PATH:-}"
+      HESTIA_POLICY_AUTO_APPLY: "${HESTIA_POLICY_AUTO_APPLY:-false}"
+      HESTIA_POLICY_GEN_INTERVAL: "${HESTIA_POLICY_GEN_INTERVAL:-100}"
     depends_on:
       postgres:
         condition: service_healthy
