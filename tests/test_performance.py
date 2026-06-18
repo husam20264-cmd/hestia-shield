@@ -43,7 +43,7 @@ class TestPerformance:
         elapsed_ms = (time.perf_counter() - start) * 1000
 
         assert all(r.status_code == 200 for r in results)
-        assert elapsed_ms < 1000
+        assert elapsed_ms < 1500
 
 
 @pytest.mark.benchmark

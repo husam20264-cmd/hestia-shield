@@ -3,6 +3,7 @@ Decision Engine for Hestia Shield v1.0.0
 """
 
 import os
+import uuid
 import time
 import logging
 from typing import Dict, Any, Optional, List
@@ -18,6 +19,14 @@ try:
     ML_AVAILABLE = True
 except ImportError:
     ML_AVAILABLE = False
+
+try:
+    from .memory.attack_memory import AttackMemory as SLAttackMemory, AttackRecord
+    from .memory.self_learner import SelfLearner
+    from .memory.strategy_optimizer import StrategyOptimizer
+    SL_MEMORY_AVAILABLE = True
+except ImportError:
+    SL_MEMORY_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 _tracer = get_tracer("hestia.decision_engine")
@@ -46,6 +55,17 @@ class DecisionEngine:
         else:
             self.ml_inference = None
             self.ml_enabled = False
+
+        if SL_MEMORY_AVAILABLE:
+            self.sl_memory = SLAttackMemory()
+            self.self_learner = SelfLearner(self.sl_memory)
+            self.strategy_optimizer = StrategyOptimizer(self.sl_memory)
+            self.learning_enabled = True
+        else:
+            self.sl_memory = None
+            self.self_learner = None
+            self.strategy_optimizer = None
+            self.learning_enabled = False
 
     async def evaluate_prompt(
         self,
@@ -156,6 +176,7 @@ class DecisionEngine:
             _decision_counter.add(1, {"decision": "allow"})
             _latency_histogram.record(total_time, {"decision": "allow"})
 
+            self._record_decision(decision, prompt)
             return decision
 
     async def evaluate_tool_call(
@@ -247,6 +268,7 @@ class DecisionEngine:
             _decision_counter.add(1, {"decision": "allow"})
             _latency_histogram.record(total_time, {"decision": "allow"})
 
+            self._record_decision(decision, "", tool_call.name)
             return decision
 
     def _check_rules(self, context: Dict) -> Optional[Decision]:
@@ -255,11 +277,46 @@ class DecisionEngine:
         self.component_times["rules"] = time.perf_counter() - start_time
         return decision
 
+    def _record_decision(
+        self, decision: Decision, prompt: str, tool_name: str = ""
+    ):
+        """Record decision in self-learning memory"""
+        if not self.learning_enabled or not self.sl_memory:
+            return
+
+        record = AttackRecord(
+            id=str(uuid.uuid4()),
+            prompt=prompt,
+            tool_used=tool_name,
+            target="",
+            was_blocked=decision.decision
+            in [DecisionType.BLOCK, DecisionType.TERMINATE_SESSION],
+            risk_score=decision.risk_score,
+            decision=decision.decision.value,
+            response=decision.reason,
+            timestamp=time.strftime("%Y-%m-%dT%H:%M:%S"),
+            context={},
+            success=decision.decision == DecisionType.ALLOW,
+        )
+
+        self.sl_memory.store(record)
+
+        if self.strategy_optimizer:
+            self.strategy_optimizer.update(record)
+
+        stats = self.sl_memory.get_stats()
+        if stats["total_attacks"] > 0 and stats["total_attacks"] % 5 == 0:
+            if self.self_learner:
+                self.self_learner.learn_from_history(limit=50)
+
     def get_stats(self) -> Dict:
-        return {
+        stats = {
             "component_times": dict(self.component_times),
             "total_evaluations": sum(
                 self.attack_memory.get_stats().get("total_events", 0)
                 for _ in range(1)
-            )
+            ),
         }
+        if self.sl_memory:
+            stats["self_learning"] = self.sl_memory.get_stats()
+        return stats
