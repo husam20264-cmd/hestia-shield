@@ -72,6 +72,7 @@
     <div class="card"><div class="card-label">Blocks</div><div class="card-value red" id="totalBlocks">—</div><div class="card-sub" id="blocksSub">Loading...</div></div>
     <div class="card"><div class="card-label">Block Rate</div><div class="card-value yellow" id="blockRate">—</div><div class="card-sub">of total requests</div></div>
     <div class="card"><div class="card-label">Avg Latency</div><div class="card-value purple" id="avgLatency">—</div><div class="card-sub">p50 response time</div></div>
+    <div class="card"><div class="card-label">Federated</div><div class="card-value green" id="federatedPatterns">—</div><div class="card-sub" id="federatedSub">FL contributions</div></div>
   </div>
 
   <div class="grid-2">
@@ -126,6 +127,9 @@ async function refreshSummary() {
   document.getElementById('avgLatency').textContent = (data.avg_latency_ms || 0).toFixed(1) + 'ms';
   document.getElementById('requestsSub').textContent = (data.total_requests_7d || 0) + ' in 7d';
   document.getElementById('blocksSub').textContent = (data.active_alerts || 0) + ' active alerts';
+  const fl = data.federated_learning || {};
+  document.getElementById('federatedPatterns').textContent = fl.enabled ? (fl.global_patterns || 0) : '—';
+  document.getElementById('federatedSub').textContent = fl.enabled ? (fl.contributions || 0) + ' contributions' : 'Not enabled';
 }
 
 async function refreshTrends() {

@@ -41,6 +41,16 @@ try:
 except ImportError:
     pass
 
+_FEDERATED_AVAILABLE = False
+try:
+    from .federated import (
+        LocalEncoder, PrivacyEngine, UpdateProtocol,
+        GlobalIntel, GlobalPattern,
+    )
+    _FEDERATED_AVAILABLE = True
+except ImportError:
+    pass
+
 logger = logging.getLogger(__name__)
 _tracer = get_tracer("hestia.decision_engine")
 _meter = get_meter("hestia.decision_engine")
@@ -114,6 +124,12 @@ class DecisionEngine:
         self._healing_adjustments = 0
         self._init_healing()
 
+        self._federated_enabled = False
+        self.federated_protocol = None
+        self.federated_encoder = None
+        self._federated_matches = 0
+        self._init_federated()
+
     def _init_healing(self) -> None:
         healing_enabled = os.getenv("HESTIA_HEALING_ENABLED", "false").lower() == "true"
         if not _HEALING_AVAILABLE or not healing_enabled:
@@ -162,6 +178,33 @@ class DecisionEngine:
         logger.info("Self-healing enabled (fp_threshold=%.2f, window=%d)",
                      self.auto_rollback.fp_threshold, self.health_monitor.window_size)
 
+    def _init_federated(self) -> None:
+        federated_enabled = os.getenv("HESTIA_FEDERATED_ENABLED", "false").lower() == "true"
+        if not _FEDERATED_AVAILABLE or not federated_enabled:
+            return
+
+        tenant_id = os.getenv("HESTIA_TENANT_ID", "default")
+        epsilon = float(os.getenv("HESTIA_FEDERATED_EPSILON", "1.0"))
+        contribution_interval = float(
+            os.getenv("HESTIA_FEDERATED_CONTRIBUTION_INTERVAL", "60.0")
+        )
+        sync_interval = float(os.getenv("HESTIA_FEDERATED_SYNC_INTERVAL", "300.0"))
+
+        self.federated_encoder = LocalEncoder()
+        self.federated_protocol = UpdateProtocol(
+            tenant_id=tenant_id,
+            encoder=self.federated_encoder,
+            privacy=PrivacyEngine(epsilon=epsilon),
+            contribution_interval=contribution_interval,
+            sync_interval=sync_interval,
+            enabled=True,
+        )
+        self._federated_enabled = True
+        logger.info(
+            "Federated learning enabled (tenant=%s, epsilon=%.1f, contribute=%ds, sync=%ds)",
+            tenant_id, epsilon, contribution_interval, sync_interval,
+        )
+
     async def evaluate_prompt(
         self,
         prompt: str,
@@ -190,6 +233,25 @@ class DecisionEngine:
 
             risk_level, risk_score, triggered = self.classifier.classify(prompt)
             self.component_times["classification"] = time.perf_counter() - start_time
+
+            if self._federated_enabled and self.federated_protocol:
+                embedding = self.federated_encoder.encode(
+                    prompt=prompt,
+                    decision="allow",
+                    risk_score=risk_score,
+                    environment=context.get("environment", "development"),
+                )
+                matches = self.federated_protocol.global_intel.query_similar(
+                    embedding, top_k=3, min_score=0.5,
+                )
+                if matches:
+                    max_global_risk = max(m.get("avg_risk_score", 0) for m in matches)
+                    boosted_score = max(risk_score, max_global_risk)
+                    risk_score = boosted_score
+                    risk_level = RiskLevel.CRITICAL if boosted_score >= 0.9 else (
+                        RiskLevel.HIGH if boosted_score >= 0.7 else risk_level
+                    )
+                    self._federated_matches += 1
 
             if _RISK_ORDER[risk_level] >= _RISK_ORDER[self._heal_block_threshold]:
                 decision = Decision(
@@ -327,6 +389,39 @@ class DecisionEngine:
                     _decision_counter.add(1, {"decision": "block"})
                     return decision
 
+            if self._federated_enabled and self.federated_protocol:
+                embedding = self.federated_encoder.encode(
+                    tool_call={
+                        "name": tool_call.name,
+                        "category": tool_call.category,
+                        "arguments": {},
+                    },
+                    decision="allow",
+                    risk_score=0.1,
+                    environment=tool_call.environment,
+                )
+                matches = self.federated_protocol.global_intel.query_similar(
+                    embedding, top_k=3, min_score=0.5,
+                )
+                if matches and any(
+                    m.get("avg_risk_score", 0) >= 0.7 for m in matches
+                ):
+                    self._federated_matches += 1
+                    decision = Decision(
+                        decision=DecisionType.HUMAN_REVIEW,
+                        risk_score=0.7,
+                        reason="Tool call matches global threat pattern",
+                        details={
+                            "tool_name": tool_call.name,
+                            "federated_matches": matches,
+                            "fast_path": False,
+                        },
+                    )
+                    span.set_attribute("decision", "human_review")
+                    span.set_attribute("federated_match", True)
+                    _decision_counter.add(1, {"decision": "human_review"})
+                    return decision
+
             if tool_call.is_critical:
                 if tool_call.environment == "production":
                     decision = Decision(
@@ -427,6 +522,17 @@ class DecisionEngine:
                 except Exception as e:
                     logger.warning("Adaptive policy generation failed: %s", e)
 
+        if self._federated_enabled and self.federated_protocol:
+            try:
+                self.federated_protocol.contribute(
+                    prompt=prompt,
+                    tool_call={"name": tool_name, "category": "", "arguments": {}} if tool_name else None,
+                    decision=decision.decision.value,
+                    risk_score=decision.risk_score,
+                )
+            except Exception as e:
+                logger.warning("Federated contribution failed: %s", e)
+
         self._run_healing_cycle()
 
     def _run_healing_cycle(self) -> None:
@@ -474,4 +580,11 @@ class DecisionEngine:
             if self.adaptive_thresholds:
                 healing_stats["adaptive_thresholds"] = self.adaptive_thresholds.get_stats()
             stats["healing"] = healing_stats
+        if self._federated_enabled:
+            stats["federated"] = {
+                "enabled": self._federated_enabled,
+                "global_pattern_matches": self._federated_matches,
+            }
+            if self.federated_protocol:
+                stats["federated"].update(self.federated_protocol.get_stats())
         return stats

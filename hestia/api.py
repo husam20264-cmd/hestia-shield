@@ -25,8 +25,8 @@ auth_manager: AuthManager = None
 
 app = FastAPI(
     title="Hestia Shield API",
-    version="1.2.0",
-    description="Runtime Security for AI Agents"
+    version="3.0.0",
+    description="Runtime Security for AI Agents",
 )
 
 security = HTTPBearer(auto_error=False)
@@ -224,6 +224,53 @@ async def dashboard_ui():
     if os.path.exists(dashboard_path):
         return FileResponse(dashboard_path, media_type="text/html")
     return {"error": "Dashboard UI not found"}
+
+
+# ── Federated Learning Endpoints ──────────────────────────────────
+
+_FEDERATED_CLIENTS: Dict[str, "UpdateProtocol"] = {}
+
+
+def _get_federated(tenant_id: str):
+    if tenant_id not in _FEDERATED_CLIENTS:
+        from .decision_engine import DecisionEngine
+        engine = get_tenant(tenant_id)
+        if engine._federated_enabled and engine.federated_protocol:
+            _FEDERATED_CLIENTS[tenant_id] = engine.federated_protocol
+    return _FEDERATED_CLIENTS.get(tenant_id)
+
+
+@app.get("/v1/federated/stats")
+async def federated_stats(auth: dict = Depends(verify_auth)):
+    tenant_id = auth["tenant_id"]
+    protocol = _get_federated(tenant_id)
+    if not protocol:
+        return {"tenant_id": tenant_id, "federated_enabled": False}
+    return {"tenant_id": tenant_id, "federated_enabled": True, "stats": protocol.get_stats()}
+
+
+@app.get("/v1/federated/global-patterns")
+async def federated_global_patterns(
+    limit: int = 20,
+    auth: dict = Depends(verify_auth),
+):
+    tenant_id = auth["tenant_id"]
+    protocol = _get_federated(tenant_id)
+    if not protocol:
+        return {"patterns": []}
+    return {"patterns": protocol.get_recent_global_patterns(limit=limit)}
+
+
+@app.post("/v1/federated/sync")
+async def federated_sync(
+    auth: dict = Depends(verify_auth),
+):
+    tenant_id = auth["tenant_id"]
+    protocol = _get_federated(tenant_id)
+    if not protocol:
+        return {"synced": False, "reason": "Federated learning not enabled"}
+    results = protocol.sync(force=True)
+    return {"synced": True, "results": results}
 
 
 @app.on_event("startup")

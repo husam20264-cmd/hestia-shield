@@ -62,6 +62,21 @@ async def get_summary(storage: StorageBackend, tenant_id: str) -> Dict[str, Any]
     daily = await storage.get_daily_stats(tenant_id, today)
     avg_latency = daily.get("avg_latency_ms", 0) if daily else 0
 
+    federated_stats = {}
+    from .decision_engine import DecisionEngine
+    engine = DecisionEngine()
+    if engine._federated_enabled and engine.federated_protocol:
+        fed = engine.federated_protocol.get_stats()
+        federated_stats = {
+            "enabled": True,
+            "contributions": fed.get("contribution_count", 0),
+            "syncs": fed.get("sync_count", 0),
+            "global_patterns": fed.get("global_intel", {}).get("total_patterns", 0),
+            "unique_tenants": fed.get("aggregator", {}).get("unique_tenants", 0),
+        }
+    else:
+        federated_stats = {"enabled": False}
+
     return {
         "tenant_id": tenant_id,
         "period_hours": 24,
@@ -72,6 +87,7 @@ async def get_summary(storage: StorageBackend, tenant_id: str) -> Dict[str, Any]
         "unique_agents": agent_count,
         "active_alerts": alert_count,
         "avg_latency_ms": avg_latency,
+        "federated_learning": federated_stats,
     }
 
 
