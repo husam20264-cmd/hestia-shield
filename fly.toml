@@ -1,0 +1,65 @@
+# fly.toml — Hestia Shield v2.0.0
+# Generated for Fly.io deployment
+#
+# Usage:
+#   flyctl launch --copy-config
+#   flyctl secrets set HESTIA_JWT_SECRET=...
+#   flyctl deploy
+
+app = "hestia-shield"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 8000
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "10s"
+    restart_limit = 3
+
+[env]
+  HESTIA_HOST = "0.0.0.0"
+  HESTIA_PORT = "8000"
+  HESTIA_LOG_LEVEL = "INFO"
+  HESTIA_DEBUG = "false"
+  HESTIA_DATA_DIR = "/app/data"
+  HESTIA_STORE_RAW_INPUTS = "false"
+  HESTIA_RATE_LIMIT_WINDOW = "60"
+  HESTIA_RATE_LIMIT_MAX = "100"
+  HESTIA_POLICY_AUTO_APPLY = "false"
+  HESTIA_POLICY_GEN_INTERVAL = "100"
+  HESTIA_HEALING_ENABLED = "true"
+  HESTIA_HEALING_FP_THRESHOLD = "0.05"
+  HESTIA_OTEL_ENABLED = "false"
+  PYTHONPATH = "/app"
+
+[mounts]
+  source = "hestia_data"
+  destination = "/app/data"
+
+[[vm]]
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1

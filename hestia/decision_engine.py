@@ -34,12 +34,27 @@ try:
 except ImportError:
     POLICY_AVAILABLE = False
 
+_HEALING_AVAILABLE = False
+try:
+    from .healing import HealthMonitor, AutoRollback, AdaptiveThresholds
+    _HEALING_AVAILABLE = True
+except ImportError:
+    pass
+
 logger = logging.getLogger(__name__)
 _tracer = get_tracer("hestia.decision_engine")
 _meter = get_meter("hestia.decision_engine")
 
 _decision_counter = _meter.create_counter("decisions.total")
 _latency_histogram = _meter.create_histogram("decisions.latency")
+
+_RISK_VALUE_MAP = {
+    1: RiskLevel.LOW,
+    2: RiskLevel.MEDIUM,
+    3: RiskLevel.HIGH,
+    4: RiskLevel.CRITICAL,
+}
+_RISK_ORDER = {v: k for k, v in _RISK_VALUE_MAP.items()}
 
 
 class DecisionEngine:
@@ -90,6 +105,63 @@ class DecisionEngine:
 
         self._decision_count = 0
 
+        self._healing_enabled = False
+        self._heal_block_threshold = RiskLevel.HIGH
+        self.health_monitor = None
+        self.auto_rollback = None
+        self.adaptive_thresholds = None
+        self._healing_rollbacks = 0
+        self._healing_adjustments = 0
+        self._init_healing()
+
+    def _init_healing(self) -> None:
+        healing_enabled = os.getenv("HESTIA_HEALING_ENABLED", "false").lower() == "true"
+        if not _HEALING_AVAILABLE or not healing_enabled:
+            return
+
+        self.health_monitor = HealthMonitor(
+            window_size=int(os.getenv("HESTIA_HEALING_WINDOW", "1000")),
+        )
+
+        def rollback_fn() -> bool:
+            self._healing_rollbacks += 1
+            if self.policy_applier:
+                for p in self.policy_applier.get_pending():
+                    self.policy_applier.reject_pending(p["policy_id"])
+            return True
+
+        self.auto_rollback = AutoRollback(
+            monitor=self.health_monitor,
+            rollback_fn=rollback_fn,
+            fp_threshold=float(os.getenv("HESTIA_HEALING_FP_THRESHOLD", "0.05")),
+            min_decisions_before_rollback=int(os.getenv("HESTIA_HEALING_MIN_DECISIONS", "50")),
+            cooldown_seconds=float(os.getenv("HESTIA_HEALING_COOLDOWN", "300")),
+        )
+
+        thresholds_dict = {"block": float(_RISK_ORDER[self._heal_block_threshold])}
+        def set_heal_thresholds(t: Dict[str, float]) -> None:
+            raw = t.get("block", 3)
+            clamped = max(1, min(4, int(round(raw))))
+            self._heal_block_threshold = _RISK_VALUE_MAP[clamped]
+            self._healing_adjustments += 1
+
+        self.adaptive_thresholds = AdaptiveThresholds(
+            monitor=self.health_monitor,
+            thresholds=thresholds_dict,
+            set_thresholds_fn=set_heal_thresholds,
+            fp_target=float(os.getenv("HESTIA_HEALING_FP_TARGET", "0.05")),
+            fn_target=float(os.getenv("HESTIA_HEALING_FN_TARGET", "0.02")),
+            adjustment_step=float(os.getenv("HESTIA_HEALING_STEP", "0.5")),
+            min_threshold=1.0,
+            max_threshold=4.0,
+            min_decisions=int(os.getenv("HESTIA_HEALING_MIN_DECISIONS", "50")),
+            cooldown_seconds=float(os.getenv("HESTIA_HEALING_ADJUST_COOLDOWN", "120")),
+        )
+
+        self._healing_enabled = True
+        logger.info("Self-healing enabled (fp_threshold=%.2f, window=%d)",
+                     self.auto_rollback.fp_threshold, self.health_monitor.window_size)
+
     async def evaluate_prompt(
         self,
         prompt: str,
@@ -119,7 +191,7 @@ class DecisionEngine:
             risk_level, risk_score, triggered = self.classifier.classify(prompt)
             self.component_times["classification"] = time.perf_counter() - start_time
 
-            if risk_level in [RiskLevel.CRITICAL, RiskLevel.HIGH]:
+            if _RISK_ORDER[risk_level] >= _RISK_ORDER[self._heal_block_threshold]:
                 decision = Decision(
                     decision=DecisionType.BLOCK,
                     risk_score=risk_score,
@@ -303,8 +375,23 @@ class DecisionEngine:
     def _record_decision(
         self, decision: Decision, prompt: str, tool_name: str = ""
     ):
-        """Record decision in self-learning memory"""
+        """Record decision in self-learning memory and health monitor"""
+        self._decision_count += 1
+
+        latency = decision.details.get(
+            "evaluation_ms",
+            decision.details.get("component_times", {}).get("classification", 0),
+        ) if isinstance(decision.details, dict) else 0
+
+        if self.health_monitor:
+            self.health_monitor.record_decision(
+                decision=decision.decision.value,
+                risk_score=decision.risk_score,
+                latency_ms=latency if isinstance(latency, (int, float)) else 0,
+            )
+
         if not self.learning_enabled or not self.sl_memory:
+            self._run_healing_cycle()
             return
 
         record = AttackRecord(
@@ -327,8 +414,6 @@ class DecisionEngine:
         if self.strategy_optimizer:
             self.strategy_optimizer.update(record)
 
-        self._decision_count += 1
-
         if self._decision_count % 5 == 0:
             if self.self_learner:
                 self.self_learner.learn_from_history(limit=50)
@@ -342,6 +427,24 @@ class DecisionEngine:
                 except Exception as e:
                     logger.warning("Adaptive policy generation failed: %s", e)
 
+        self._run_healing_cycle()
+
+    def _run_healing_cycle(self) -> None:
+        if not self._healing_enabled:
+            return
+        if self._decision_count % 10 != 0:
+            return
+        if self.auto_rollback:
+            try:
+                self.auto_rollback.tick()
+            except Exception as e:
+                logger.warning("AutoRollback tick failed: %s", e)
+        if self.adaptive_thresholds:
+            try:
+                self.adaptive_thresholds.tick()
+            except Exception as e:
+                logger.warning("AdaptiveThresholds tick failed: %s", e)
+
     def get_stats(self) -> Dict:
         stats = {
             "component_times": dict(self.component_times),
@@ -349,6 +452,7 @@ class DecisionEngine:
                 self.attack_memory.get_stats().get("total_events", 0)
                 for _ in range(1)
             ),
+            "heal_block_threshold": self._heal_block_threshold.value,
         }
         if self.sl_memory:
             stats["self_learning"] = self.sl_memory.get_stats()
@@ -356,4 +460,18 @@ class DecisionEngine:
             stats["adaptive_policy"] = self.policy_generator.get_stats()
             if self.policy_applier:
                 stats["adaptive_policy"].update(self.policy_applier.get_stats())
+        if self._healing_enabled:
+            healing_stats = {
+                "enabled": self._healing_enabled,
+                "block_threshold": self._heal_block_threshold.value,
+                "rollbacks_triggered": self._healing_rollbacks,
+                "adjustments_made": self._healing_adjustments,
+            }
+            if self.health_monitor:
+                healing_stats["health"] = self.health_monitor.get_stats()
+            if self.auto_rollback:
+                healing_stats["auto_rollback"] = self.auto_rollback.get_stats()
+            if self.adaptive_thresholds:
+                healing_stats["adaptive_thresholds"] = self.adaptive_thresholds.get_stats()
+            stats["healing"] = healing_stats
         return stats
