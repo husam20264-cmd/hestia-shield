@@ -19,6 +19,10 @@ try:
 except ImportError:
     AUTOGEN_AVAILABLE = False
     AssistantAgent = object
+    Response = Any
+    BaseChatMessage = Any
+    TextMessage = Any
+    CancellationToken = Any
 
 logger = logging.getLogger(__name__)
 

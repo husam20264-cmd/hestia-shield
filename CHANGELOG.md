@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.0.0] - 2026-06-25
+
+### 🏗️ Project Maturity
+- Unified version across all files (pyproject.toml, version.py, Dockerfile, docs)
+- Added numpy and scikit-learn as core dependencies
+- Fixed BaseChatMessage import compatibility for autogen integration
+- Renamed .env.production to .env.production.example for security
+- Updated README with clear problem/solution/quick-start structure
+- Test coverage: 346/346 passing
+
+### 📦 Packaging
+- Version bump to 3.0.0
+- Improved README introduction for quick understanding
+- Updated performance metrics table
+
+---
+
 ## [1.2.0] - 2026-06-20
 
 ### 🧠 ML-based Threat Detection

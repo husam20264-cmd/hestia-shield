@@ -1,62 +1,92 @@
 {
   "agent_name": "HestiaAttackAgent",
-  "version": "1.0.0",
-  "timestamp": "2026-06-17T18:44:42.087457",
+  "version": "3.0.0",
+  "timestamp": "2026-06-18T13:24:31.134773",
   "results": {
     "attack_chain": {
       "stages": [
         {
           "name": "Reconnaissance",
-          "status": "completed"
+          "status": "failed",
+          "detected": true,
+          "risk_score": 0.8,
+          "tool_used": "fs.read"
         },
         {
           "name": "Vulnerability Scan",
-          "status": "completed"
+          "status": "failed",
+          "detected": true,
+          "risk_score": 0.8,
+          "tool_used": "fs.read"
         },
         {
           "name": "Privilege Probe",
-          "status": "completed"
+          "status": "failed",
+          "detected": true,
+          "risk_score": 0.8,
+          "tool_used": "fs.read"
         },
         {
           "name": "Credential Theft",
-          "status": "completed"
+          "status": "failed",
+          "detected": true,
+          "risk_score": 0.8,
+          "tool_used": "fs.read"
         },
         {
           "name": "Privilege Escalation",
-          "status": "completed"
+          "status": "failed",
+          "detected": true,
+          "risk_score": 0.8,
+          "tool_used": "fs.read"
         },
         {
           "name": "Data Discovery",
-          "status": "completed"
+          "status": "failed",
+          "detected": true,
+          "risk_score": 0.8,
+          "tool_used": "fs.read"
         },
         {
           "name": "Data Collection",
-          "status": "completed"
+          "status": "failed",
+          "detected": true,
+          "risk_score": 0.8,
+          "tool_used": "fs.read"
         },
         {
           "name": "Data Exfiltration",
-          "status": "completed"
+          "status": "failed",
+          "detected": true,
+          "risk_score": 0.8,
+          "tool_used": "fs.read"
         },
         {
           "name": "Lateral Movement",
-          "status": "completed"
+          "status": "failed",
+          "detected": true,
+          "risk_score": 0.8,
+          "tool_used": "fs.read"
         },
         {
           "name": "Impact",
-          "status": "completed"
+          "status": "failed",
+          "detected": true,
+          "risk_score": 0.8,
+          "tool_used": "fs.read"
         }
       ],
-      "completion_rate": 1.0,
-      "duration": 0.017326
+      "completion_rate": 0.0,
+      "duration": 0.051748
     },
     "security": {
-      "detection_rate": 0.0,
-      "detected_attacks": 0,
+      "detection_rate": 20.0,
+      "detected_attacks": 20,
       "total_attacks": 1
     },
     "memory": {
       "total_interactions": 10,
-      "success_rate": 1.0
+      "success_rate": 0.0
     },
     "tools": {
       "used": [],
@@ -64,7 +94,7 @@
     }
   },
   "metadata": {
-    "hestia_version": "1.1.0",
+    "hestia_version": "3.0.0",
     "tenant": "kaggle_challenge",
     "target_user": "target_user_001"
   }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-# Hestia Shield v2.0.0 — Fly.io Deployment Script
+# Hestia Shield v3.0.0 — Fly.io Deployment Script
 # ============================================================
 set -euo pipefail
 

@@ -1,5 +1,5 @@
 """
-Hestia Shield v2.0.0 — Self-Healing Systems
+Hestia Shield v3.0.0 — Self-Healing Systems
 
 Automatic health monitoring, policy rollback, and adaptive threshold
 adjustment for Hestia Shield.

@@ -1,5 +1,5 @@
 """
-Adaptive Policy Generator for Hestia Shield v1.2.0
+Adaptive Policy Generator for Hestia Shield v3.0.0
 
 Analyzes attack memory to generate, refine, and apply security policies
 automatically. The system writes its own rules based on observed patterns.

@@ -1,5 +1,5 @@
 """
-API for Hestia Shield v1.1.0
+API for Hestia Shield v3.0.0
 """
 
 import os

@@ -1,5 +1,5 @@
 # ============================================================
-# Hestia Shield v2.0.0 — Production Docker Image
+# Hestia Shield v3.0.0 — Production Docker Image
 # Multi-stage build: builder → runtime
 # ============================================================
 
@@ -24,7 +24,7 @@ FROM python:3.13-slim AS runtime
 
 LABEL org.opencontainers.image.title="Hestia Shield"
 LABEL org.opencontainers.image.description="Runtime Security for AI Agents"
-LABEL org.opencontainers.image.version="2.0.0"
+LABEL org.opencontainers.image.version="3.0.0"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
